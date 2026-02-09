@@ -294,5 +294,5 @@ Internal use only. Customize as needed for your organization.
 
 ---
 
-**Questions?** Contact the Observability Team or open an issue.
+**Questions?** Contact jacob.montalvo-santiago@dynatrace.com 
 
