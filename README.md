@@ -65,234 +65,134 @@ Add four tasks in sequence:
 1. **fetch_slo_data** (JavaScript) - Copy from `1_fetch_slo_data.js`
 2. **build_markdown_email** (JavaScript) - Copy from `2_build_markdown_email.js`
 3. **send_email** (Send Email action) - Configure recipients
-4. **create_ado_ticket** (JavaScript, optional) - Copy from `3_create_ado_ticket.js`
+4. **create_ado_ticket** (JavaScript) - Copy from `3_create_ado_ticket.js` (optional)
 
-### Step 3: Configure Task Connections
+### Step 3: Configure Each Task
 
+Search each file for `TODO:` comments — these mark every field that needs customization.
+
+### Step 4: Configure Email Task
+
+**Subject:**
 ```
-fetch_slo_data → build_markdown_email → send_email
-                                      ↘ create_ado_ticket (conditional)
+[EXT] SLO Report - Your Domain Name - {{ result('build_markdown_email').reportDate }}
 ```
 
-For `create_ado_ticket`, set the condition:
+**Message:**
 ```
-{{ result('fetch_slo_data').hasBreach == true }}
+{{ result('build_markdown_email').markdown }}
 ```
 
-### Step 4: Customize Configuration
+### Step 5: Configure Task Conditions
 
-Edit the `CONFIGURATION` section in each JavaScript task (see below).
+| Task | Predecessor Condition | Custom Condition |
+|------|----------------------|------------------|
+| **fetch_slo_data** | *(none - first task)* | *(leave blank)* |
+| **build_markdown_email** | fetch_slo_data = **success** | *(leave blank)* |
+| **send_email** | build_markdown_email = **success** | *(leave blank)* |
+| **create_ado_ticket** | fetch_slo_data = **success** | `{{ result('fetch_slo_data').hasBreach == true }}` |
 
 ## ⚙️ Configuration Guide
 
 ### 1_fetch_slo_data.js
 
-#### Adding Regular SLOs
-
-```javascript
-const sloIds = [
-  "your-slo-id-1",  // Copy from SLO URL or API
-  "your-slo-id-2",
-  // Add more SLO IDs here
-];
-```
-
-**Finding SLO IDs:**
-- Open the SLO in Dynatrace
-- The ID is in the URL: `https://.../#slo;id=<SLO_ID>`
-
-#### Adding Synthetic-Based SLOs
-
-```javascript
-const syntheticSloConfig = {
-  "slo-id-for-synthetic": {
-    syntheticId: "SYNTHETIC_TEST-XXXXXXXXXXXXXXXX",  // From synthetic URL
-    syntheticName: "Human-readable name",
-    type: "BROWSER"  // or "HTTP"
-  }
-};
-```
-
-**Finding Synthetic IDs:**
-- Open the synthetic monitor in Dynatrace
-- The ID is in the URL: `https://.../browser-monitor/<SYNTHETIC_ID>`
-
-#### Setting Dashboard URL
-
-```javascript
-const dashboardUrl = "https://your-tenant.apps.dynatrace.com/ui/apps/dynatrace.classic.dashboards/#dashboard;id=<DASHBOARD_ID>";
-```
+| Setting | Description | Example |
+|---------|-------------|---------|
+| `sloIds` | Array of SLO IDs to monitor | `["abc-123", "def-456"]` |
+| `dashboardUrl` | URL to your SLO dashboard | `https://tenant.apps.dynatrace.com/...` |
+| `syntheticSloConfig` | Map of synthetic SLO IDs to monitor config | See file comments |
+| `SLO_BATCH_SIZE` | Number of SLOs per API call (default: 20) | `20` |
+| `USQL_BATCH_SIZE` | User actions per USQL query (default: 10) | `10` |
 
 ### 2_build_markdown_email.js
 
-#### Customizing Thresholds
-
-```javascript
-// When to show synthetic monitors (only if below this)
-const SYNTHETIC_AVAILABILITY_THRESHOLD = 99.98;
-```
-
-#### Customizing Attention Criteria
-
-```javascript
-// In needsAttention() function:
-return totalErrors >= 10 || avgDuration >= 3000;  // 10 errors or 3 seconds
-```
-
-#### Updating Dynatrace Tenant URL
-
-Search and replace all instances of:
-```
-https://uaa82747.apps.dynatrace.com
-```
-with your tenant URL.
+| Setting | Description | Example |
+|---------|-------------|---------|
+| `reportTitle` | Main report heading | `"🏦 Northern Trust - SLO Report"` |
+| `reportSubtitle` | Domain/environment label | `"Financial Picture (PPC)"` |
+| `dynatraceTenantUrl` | Your tenant URL for deep links | `"https://abc123.apps.dynatrace.com"` |
+| `prioritySloIds` | SLO IDs to pin at top of each category | `["id-1", "id-2"]` |
+| `sloExplainedUrl` | Link to SLO documentation dashboard | URL string |
+| `errorAnalysisUrl` | Link to error analysis dashboard (optional) | URL string or `""` |
 
 ### 3_create_ado_ticket.js
 
-#### Azure DevOps Configuration
+| Setting | Description | Example |
+|---------|-------------|---------|
+| `adoOrganization` | Azure DevOps org name | `"your-org"` |
+| `adoProject` | ADO project name | `"your-project"` |
+| `adoPatCredentialId` | Dynatrace Credential Vault ID for ADO PAT | `"CREDENTIALS_VAULT-xxxxx"` |
+| `areaPath` | Work item area path | `"Project\\Team"` |
+| `workItemType` | ADO work item type | `"Bug"` or `"Task"` |
 
-```javascript
-const adoOrganization = "YourOrganization";
-const adoProject = "YourProject";
-const areaPath = "YourProject\\Team\\Area";
-const credentialVaultId = "CREDENTIALS_VAULT-XXXXXXXXXXXXXXXX";
-```
+## 📊 Report Features
 
-#### Work Item Type
+### SLO Categorization
 
-```javascript
-const workItemType = "User Story";  // or "Bug", "Task", "Feature"
-```
+SLOs are categorized into three sections based on their **7-day evaluation window**:
 
-## 🔑 Prerequisites
+- **❌ SLOs Below Target (Action Required)** — 7-day value is below the SLO target
+- **✅ SLOs Meeting Target** — 7-day value meets or exceeds the SLO target
+- **➖ SLOs With No Data** — No valid data for the 7-day window
 
-### Required Dynatrace Permissions
+> Using the 7-day window provides more stable alerting than daily values. A single bad day won't trigger an action item, but sustained issues will always surface.
 
-- **SLO Read** - For fetching SLO status
-- **Entities Read** - For user action entity lookups
-- **Metrics Read** - For synthetic availability
-- **USQL Access** - For user action performance data
+### Trend Analysis (4-Window)
 
-### For Azure DevOps Integration
+The trend column evaluates all transitions across four time windows (90d → 30d → 7d → current):
 
-1. **Create a PAT** in Azure DevOps with `Work Items: Read & Write` scope
-2. **Store in Credential Vault:**
-   - Navigate to **Settings > Credential Vault**
-   - Add new credential with the PAT
-   - Note the credential ID
-3. **Add to Allowed Outbound Connections:**
-   - Navigate to **Settings > Allowed Outbound Connections**
-   - Add `dev.azure.com`
+| Emoji | Meaning | Logic |
+|-------|---------|-------|
+| 📈 | Consistently improving | ALL transitions going up |
+| 📉 | Consistently degrading | ALL transitions going down |
+| ➡️ | Stable | ALL transitions within ±0.005% |
+| 〰️ | Fluctuating | Mixed up and down transitions |
+| ➖ | Insufficient data | Fewer than 2 valid data points |
 
-### For Key User Actions (Clickable Links)
+### Priority SLO Ordering
 
-User actions must be marked as **Key User Actions** to have entity IDs and enable deep linking:
+Application-level SLOs (e.g., Application Apdex, Error-Free Rate) can be pinned to the top of each category by adding their IDs to the `prioritySloIds` array. These SLOs appear first in their defined order, followed by remaining SLOs alphabetically.
 
-1. Navigate to **Frontend > Application > User Actions**
-2. Select the user action
-3. Click **Mark as key user action**
+### User Action Metrics
 
-## 📧 Email Task Configuration
+User actions are shown only when they need attention:
+- **≥10 total errors** (custom + JS + request errors combined)
+- **≥3 second average duration**
 
-Configure the built-in **Send Email** task:
+Actions are ranked by severity score and limited to the top 3 per SLO to keep reports concise. Each action name links directly to its Dynatrace detail page.
 
-| Field | Value |
-|-------|-------|
-| **To** | recipient@company.com |
-| **Subject** | `[EXT] SLO Report - {{result('build_markdown_email').reportDate}}` |
-| **Body** | `{{result('build_markdown_email').markdown}}` |
+### Synthetic Monitoring
 
-## 🎨 Customization Examples
+For SLOs backed by synthetic monitors instead of real user actions, a separate section shows:
+- 7-day average availability percentage
+- Comparison against the SLO target
+- Number of monitoring locations
+- Direct link to the synthetic monitor in Dynatrace
 
-### Example: Adding a New Domain Report
+Synthetic data only displays when availability drops below the configured threshold.
 
-1. Copy all files to a new workflow
-2. Update `sloIds` with your domain's SLOs
-3. Update report title in `build_markdown_email.js`:
-   ```javascript
-   markdown += "## Your Domain Name (PPC)\n\n";
-   ```
-4. Update dashboard URL to your domain's dashboard
+## 🔧 Troubleshooting
 
-### Example: Changing Error Thresholds
+| Issue | Solution |
+|-------|----------|
+| "No data" for all SLOs | Verify SLO IDs exist in your environment |
+| User action links not clickable | Ensure actions are marked as "Key User Actions" in Dynatrace |
+| Empty user action metrics | USQL query may be failing — check workflow execution logs |
+| Synthetic section missing | Verify `syntheticSloConfig` is correctly mapped in `1_fetch_slo_data.js` |
+| ADO ticket not created | Check that the custom condition `{{ result('fetch_slo_data').hasBreach == true }}` is set |
+| Wrong SLOs in "Action Required" | Categorization uses the 7-day value, not the current (1-day) value |
 
-In `2_build_markdown_email.js`, modify `needsAttention()`:
+## 📝 Changelog
 
-```javascript
-const needsAttention = (metrics) => {
-  if (!metrics) return false;
-  const totalErrors = (metrics.customErrors || 0) + (metrics.jsErrors || 0) + (metrics.requestErrors || 0);
-  const avgDuration = metrics.avgDuration || 0;
-  
-  // Customize these thresholds:
-  return totalErrors >= 5 || avgDuration >= 2000;  // More sensitive
-};
-```
+### v2.0 (February 2025)
+- **7-day evaluation window** — SLO categorization (pass/fail) and status emoji now based on the 7-day value instead of the current (1-day) value for more stable alerting
+- **4-window trend analysis** — Trend column evaluates all transitions across 90d → 30d → 7d → current with near-zero threshold (0.005%)
+- **Fluctuating indicator** — New 〰️ emoji for SLOs with mixed up/down movement across windows
+- **Action Required note** — Italicized note beneath the "Action Required" heading clarifying that categorization is based on the 7-day value
+- **Priority SLO ordering** — Application-level SLOs can be pinned to the top of each category
 
-### Example: Removing ADO Integration
-
-Simply don't add the `create_ado_ticket` task to your workflow.
-
-## 🔍 Troubleshooting
-
-### No User Action Links
-
-- Ensure user actions are marked as **Key User Actions**
-- Only Key User Actions receive APPLICATION_METHOD entity IDs
-
-### USQL Errors (414 URI Too Long)
-
-- Reduce `USQL_BATCH_SIZE` in `1_fetch_slo_data.js`
-- Default is 10; try 5 for very long action names
-
-### ADO Ticket Creation Fails
-
-- Verify PAT has correct scopes
-- Check area path permissions
-- Ensure `dev.azure.com` is in allowed outbound connections
-
-### Missing Synthetic Data
-
-- Verify synthetic monitor ID is correct
-- Check that the synthetic monitor has recent executions
-- Ensure `type` matches ("BROWSER" vs "HTTP")
-
-## 📊 Report Output Example
-
-```
-# 🏦 Northern Trust - SLO Report
-
-## Your Domain (PPC)
-
-**Report Date:** 2026-01-30
-
-## Executive Summary
-
-| Metric | Value |
-|--------|-------|
-| **Overall Status** | ✅ OK |
-| Total SLOs Monitored | 4 |
-| Passing | 3 ✅ |
-| Failing | 1 ❌ |
-
-## ❌ SLOs Below Target (Action Required)
-
-| SLO Name | Target | 90 Day | 30 Day | 7 Day | Current | Trend |
-|----------|--------|--------|--------|-------|---------|-------|
-| ❌ Checkout Flow | 99% | 99.50% | 99.20% | 98.80% | 98.50% | 📉 |
-```
-
-## 📝 License
-
-Internal use only. Customize as needed for your organization.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request with clear documentation
-
----
-
-**Questions?** Contact jacob.montalvo-santiago@dynatrace.com 
-
+### v1.0 (January 2025)
+- Initial release with multi-window SLO reporting
+- User action metrics with deep links
+- Synthetic monitor availability tracking
+- Azure DevOps work item integration
