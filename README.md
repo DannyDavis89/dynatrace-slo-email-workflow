@@ -100,6 +100,7 @@ Search each file for `TODO:` comments — these mark every field that needs cust
 |---------|-------------|---------|
 | `sloIds` | Array of SLO IDs to monitor | `["abc-123", "def-456"]` |
 | `dashboardUrl` | URL to your SLO dashboard | `https://tenant.apps.dynatrace.com/...` |
+| `applicationName` | Dynatrace application name (for USQL) | `"My App (Prod)"` |
 | `syntheticSloConfig` | Map of synthetic SLO IDs to monitor config | See file comments |
 | `SLO_BATCH_SIZE` | Number of SLOs per API call (default: 20) | `20` |
 | `USQL_BATCH_SIZE` | User actions per USQL query (default: 10) | `10` |
@@ -108,8 +109,8 @@ Search each file for `TODO:` comments — these mark every field that needs cust
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| `reportTitle` | Main report heading | `"🏦 Northern Trust - SLO Report"` |
-| `reportSubtitle` | Domain/environment label | `"Financial Picture (PPC)"` |
+| `reportTitle` | Main report heading | `"📊 SLO Report"` |
+| `reportSubtitle` | Domain/environment label | `"Financial Picture (Prod)"` |
 | `dynatraceTenantUrl` | Your tenant URL for deep links | `"https://abc123.apps.dynatrace.com"` |
 | `prioritySloIds` | SLO IDs to pin at top of each category | `["id-1", "id-2"]` |
 | `sloExplainedUrl` | Link to SLO documentation dashboard | URL string |
@@ -121,7 +122,7 @@ Search each file for `TODO:` comments — these mark every field that needs cust
 |---------|-------------|---------|
 | `adoOrganization` | Azure DevOps org name | `"your-org"` |
 | `adoProject` | ADO project name | `"your-project"` |
-| `adoPatCredentialId` | Dynatrace Credential Vault ID for ADO PAT | `"CREDENTIALS_VAULT-xxxxx"` |
+| `adoPatCredentialId` | Dynatrace Credential Vault ID for ADO PAT | `"CREDENTIALS_VAULT-XXXXXXXXXXXXXXXX"` |
 | `areaPath` | Work item area path | `"Project\\Team"` |
 | `workItemType` | ADO work item type | `"Bug"` or `"Task"` |
 
