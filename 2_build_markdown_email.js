@@ -1,31 +1,17 @@
-/**
- * ============================================================================
- * TASK 2: BUILD MARKDOWN EMAIL
- * ============================================================================
- * 
- * PURPOSE:
- * Transforms raw SLO data into a formatted markdown email report.
- * 
- * INPUT:
- * Receives data from fetch_slo_data task via execution context
- * 
- * OUTPUT:
- * Returns markdown string and report date for the email task
- * 
- * FEATURES:
- *   - Categorizes SLOs (Passing, Failing, No Data)
- *   - Shows trends across time periods
- *   - Filters user actions to only show those needing attention
- *   - Creates clickable deep links to Dynatrace pages
- *   - Formats synthetic monitor availability
- * 
- * ============================================================================
- */
+// ============================================
+// 2_build_markdown_email.js
+// SLO Email Report Builder - Markdown Generator
+//
+// This task transforms raw SLO data into a formatted
+// markdown email report with trend analysis, user action
+// metrics, and optional synthetic monitoring details.
+//
+// Prerequisites: Must run after fetch_slo_data task
+// ============================================
 
 import { execution } from '@dynatrace-sdk/automation-utils';
 
 export default async function ({ execution_id }) {
-  // Retrieve data from the fetch_slo_data task
   const ex = await execution(execution_id);
   const sloData = await ex.result('fetch_slo_data');
 
@@ -35,97 +21,128 @@ export default async function ({ execution_id }) {
   console.log("User action entities received: " + Object.keys(sloData.userActionEntities || {}).length);
   console.log("Synthetic metrics received: " + Object.keys(sloData.syntheticMetrics || {}).length);
 
-  // ============================================================================
-  // CONFIGURATION - MODIFY THIS SECTION FOR YOUR USE CASE
-  // ============================================================================
+  // ============================================
+  // CONFIGURATION
+  // TODO: Update these values for your domain
+  // ============================================
 
-  /**
-   * Report Title and Branding
-   * Customize these for your organization and domain
-   */
-  const REPORT_TITLE = "🏦 Your Organization - SLO Report";  // TODO: Update organization name
-  const REPORT_SUBTITLE = "Your Domain Name (PPC)";          // TODO: Update domain name
+  // TODO: Update report title and subtitle
+  const reportTitle = "📊 SLO Report";
+  const reportSubtitle = "Your Domain Name (Prod)"; // e.g., "Financial Picture (Prod)", "Collaboration (Prod)"
 
-  /**
-   * Dashboard URLs
-   * Links included in the email for easy access to Dynatrace
-   */
-  const sloExplainedUrl = "https://YOUR-TENANT.apps.dynatrace.com/ui/apps/dynatrace.classic.dashboards/#dashboard;gtf=-1w;gf=all;id=YOUR-DASHBOARD-ID";
-  // TODO: Replace with your "SLOs Explained" dashboard URL (or remove if not needed)
+  // TODO: Update dashboard URLs for your environment
+  const sloExplainedUrl = "https://YOUR_TENANT.apps.dynatrace.com/ui/apps/dynatrace.classic.dashboards/#dashboard;gtf=-1w;gf=all;id=YOUR_DASHBOARD_ID";
+  const errorAnalysisUrl = ""; // Optional: URL to an error analysis dashboard
 
-  /**
-   * Dynatrace Tenant Base URL
-   * Used for building deep links to user actions and synthetic monitors
-   */
-  const DYNATRACE_BASE_URL = "https://YOUR-TENANT.apps.dynatrace.com";
-  // TODO: Replace with your Dynatrace tenant URL
+  // TODO: Update your Dynatrace tenant URL (used for deep links)
+  const dynatraceTenantUrl = "https://YOUR_TENANT.apps.dynatrace.com";
 
-  /**
-   * Thresholds for Filtering
-   * Only items exceeding these thresholds will be shown in the report
-   */
-  const SYNTHETIC_AVAILABILITY_THRESHOLD = 99.98;  // Show synthetic if below this %
-  const ERROR_THRESHOLD = 10;                       // Show user action if errors >= this
-  const DURATION_THRESHOLD_MS = 3000;               // Show user action if duration >= this (milliseconds)
+  // TODO: If you have priority SLOs that should appear at the top of each category, list their IDs here
+  // These are typically application-level SLOs (e.g., Application Apdex, Error-Free Rate)
+  // Leave empty [] if you don't need priority ordering
+  const prioritySloIds = [
+    // "your-priority-slo-id-1", // e.g., Application Apdex
+    // "your-priority-slo-id-2", // e.g., All User Action Error-Free Rate
+  ];
 
-  /**
-   * Duration Warning Thresholds (for emoji indicators)
-   */
-  const DURATION_WARNING_MS = 3000;   // ⚠️ Warning threshold
-  const DURATION_CRITICAL_MS = 12000; // ❌ Critical threshold
+  // Synthetic availability threshold (only show if below this)
+  // TODO: Adjust if your synthetic SLOs have different targets
+  const SYNTHETIC_AVAILABILITY_THRESHOLD = 99.98;
 
-  /**
-   * Error Warning Thresholds (for emoji indicators)
-   */
-  const ERROR_WARNING = 10;   // ⚠️ Warning threshold
-  const ERROR_CRITICAL = 10;  // ❌ Critical threshold (same as warning = any errors are critical)
+  // ============================================
+  // HELPER FUNCTIONS
+  // These generally don't need modification
+  // ============================================
 
-  /**
-   * Maximum user actions to show per SLO
-   */
-  const MAX_USER_ACTIONS_PER_SLO = 3;
-
-  // ============================================================================
-  // HELPER FUNCTIONS - MODIFY IF YOU NEED DIFFERENT FORMATTING
-  // ============================================================================
-
-  /** Safely get nested property */
+  // Helper to safely get nested property
   const safeGet = (obj, prop) => obj && obj[prop] !== undefined ? obj[prop] : null;
 
-  /** Check if status value is valid */
+  // Helper to check if status is valid
   const isValidStatus = (val) => val != null && val !== undefined && val >= 0;
 
-  /** Format percentage status */
+  // Helper to format status value
   const fmtStatus = (val) => {
     if (!isValidStatus(val)) return "N/A";
     return val.toFixed(2) + "%";
   };
 
-  /** Get status emoji based on value vs target */
+  // Helper to get status emoji based on value vs target
   const getStatusEmoji = (val, target) => {
     if (!isValidStatus(val)) return "➖";
     if (val >= target) return "✅";
-    if (val >= target * 0.95) return "⚠️";  // Within 5% of target
+    if (val >= target * 0.95) return "⚠️";
     return "❌";
   };
 
-  /** Get trend indicator comparing current to 7-day */
-  const getTrend = (day7Val, currentVal) => {
-    if (!isValidStatus(day7Val) || !isValidStatus(currentVal)) return "";
-    const diff = currentVal - day7Val;
-    if (diff > 1) return "📈";   // Improving by more than 1%
-    if (diff < -1) return "📉";  // Degrading by more than 1%
-    return "➡️";                 // Stable
-  };
-
-  /** Get the "current" period data with fallback */
+  // Helper to get the "current" period data
   const getCurrent = (slo) => {
     if (slo.current) return slo.current;
     if (slo.daily) return slo.daily;
     return { status: null, errorBudget: null };
   };
 
-  /** Format duration with emoji warning */
+  // ============================================
+  // TREND CALCULATION
+  // Evaluates direction across all 4 time windows:
+  //   90d → 30d → 7d → current
+  //
+  // 📈 = ALL transitions going up (consistently improving)
+  // 📉 = ALL transitions going down (consistently degrading)
+  // ➡️ = ALL values stable (within threshold, no meaningful movement)
+  // 〰️ = Mixed directions (fluctuating)
+  // ============================================
+  const getTrend = (slo) => {
+    const current = getCurrent(slo);
+    const values = [
+      safeGet(slo.day90, 'status'),
+      safeGet(slo.day30, 'status'),
+      safeGet(slo.day7, 'status'),
+      safeGet(current, 'status')
+    ];
+
+    // Filter to only valid values
+    const valid = values.filter(v => isValidStatus(v));
+
+    // Need at least 2 data points to determine a trend
+    if (valid.length < 2) return "➖";
+
+    // Threshold for considering two values "the same"
+    // Near-zero: only floating-point rounding is ignored
+    // Any real movement (even 0.01%) counts as directional
+    const STABLE_THRESHOLD = 0.005;
+
+    let ups = 0;
+    let downs = 0;
+    let flats = 0;
+
+    for (let i = 0; i < valid.length - 1; i++) {
+      const diff = valid[i + 1] - valid[i];
+
+      if (Math.abs(diff) <= STABLE_THRESHOLD) {
+        flats++;
+      } else if (diff > 0) {
+        ups++;
+      } else {
+        downs++;
+      }
+    }
+
+    const transitions = valid.length - 1;
+
+    // ALL transitions are flat = stable
+    if (flats === transitions) return "➡️";
+
+    // ALL non-flat transitions go up (flats are ok alongside ups)
+    if (downs === 0 && ups > 0) return "📈";
+
+    // ALL non-flat transitions go down (flats are ok alongside downs)
+    if (ups === 0 && downs > 0) return "📉";
+
+    // Mix of ups and downs = fluctuating
+    return "〰️";
+  };
+
+  // Helper to format duration with emoji warning
   const fmtDurationWithEmoji = (ms) => {
     if (ms == null || ms === undefined) return "N/A";
 
@@ -136,26 +153,28 @@ export default async function ({ execution_id }) {
       formatted = (ms / 1000).toFixed(2) + " s";
     }
 
-    if (ms > DURATION_CRITICAL_MS) {
+    if (ms > 12000) {
       return formatted + " ❌";
-    } else if (ms > DURATION_WARNING_MS) {
+    } else if (ms > 3000) {
       return formatted + " ⚠️";
     }
 
     return formatted;
   };
 
-  /** Get error emoji based on count */
+  // Helper to get error emoji based on count
   const getErrorEmoji = (count) => {
     if (count == null || count === 0) return "";
-    if (count <= ERROR_WARNING) return " ⚠️";
+    if (count <= 10) return " ⚠️";
     return " ❌";
   };
 
-  /**
-   * Shorten user action name for display
-   * Extracts action type and endpoint, truncates long paths
-   */
+  // ============================================
+  // USER ACTION NAME SHORTENING
+  // TODO: Adjust the shortening logic if your user action
+  // names follow a different pattern than the default
+  // "click [button] landing on https://..." format
+  // ============================================
   const shortenUserAction = (userAction) => {
     if (!userAction) return "N/A";
 
@@ -174,7 +193,6 @@ export default async function ({ execution_id }) {
       return userAction.length > 50 ? userAction.substring(0, 47) + "..." : userAction;
     }
 
-    // Extract just the path, remove domain
     let path = endpoint.replace(/https?:\/\/[^\/]+/, "");
     const segments = path.split("/").filter(s => s.length > 0);
     if (segments.length > 2) {
@@ -188,11 +206,7 @@ export default async function ({ execution_id }) {
     return actionType + " → " + endpoint;
   };
 
-  /**
-   * Build Dynatrace user action deep link URL
-   * 
-   * NOTE: Only works for Key User Actions (those with entity IDs)
-   */
+  // Helper to build Dynatrace user action URL
   const buildUserActionUrl = (userAction, entities) => {
     if (!entities || !entities.entityId || !entities.applicationId) {
       return null;
@@ -204,7 +218,8 @@ export default async function ({ execution_id }) {
       .replace(/\/\//g, '%5C0%5C0')
       .replace(/\//g, '%5C0');
 
-    const baseUrl = DYNATRACE_BASE_URL + "/ui/apps/dynatrace.classic.frontend/#uemapplications/uemuseractionmetrics";
+    // TODO: Update the base URL to match your Dynatrace tenant
+    const baseUrl = dynatraceTenantUrl + "/ui/apps/dynatrace.classic.frontend/#uemapplications/uemuseractionmetrics";
 
     return baseUrl +
       ";uemuserActionId=" + entities.entityId +
@@ -213,15 +228,13 @@ export default async function ({ execution_id }) {
       ";gtf=-7d;gf=all";
   };
 
-  /**
-   * Build Dynatrace synthetic monitor deep link URL
-   */
+  // Helper to build Dynatrace synthetic monitor URL
   const buildSyntheticUrl = (syntheticId, type) => {
     if (!syntheticId) return null;
 
-    const baseUrl = DYNATRACE_BASE_URL + "/ui/apps/dynatrace.classic.synthetic/ui";
+    // TODO: Update the base URL to match your Dynatrace tenant
+    const baseUrl = dynatraceTenantUrl + "/ui/apps/dynatrace.classic.synthetic/ui";
 
-    // Determine monitor type path
     let monitorPath;
     if (type === "BROWSER") {
       monitorPath = "browser-monitor";
@@ -234,40 +247,30 @@ export default async function ({ execution_id }) {
     return baseUrl + "/" + monitorPath + "/" + syntheticId + "?gtf=-7d&gf=all";
   };
 
-  /**
-   * Check if a user action needs attention based on thresholds
-   * Modify the conditions here to change what's shown in the report
-   */
+  // Helper to check if a user action needs attention
+  // TODO: Adjust thresholds if needed
+  //   - totalErrors >= 10: flags user actions with 10+ combined errors
+  //   - avgDuration >= 3000: flags user actions averaging 3+ seconds
   const needsAttention = (metrics) => {
     if (!metrics) return false;
 
     const totalErrors = (metrics.customErrors || 0) + (metrics.jsErrors || 0) + (metrics.requestErrors || 0);
     const avgDuration = metrics.avgDuration || 0;
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ MODIFY THESE CONDITIONS TO CHANGE FILTERING LOGIC
-    // └─────────────────────────────────────────────────────────────────────────
-    return totalErrors >= ERROR_THRESHOLD || avgDuration >= DURATION_THRESHOLD_MS;
+    return totalErrors >= 10 || avgDuration >= 3000;
   };
 
-  /**
-   * Calculate attention score for ranking user actions by severity
-   * Higher score = more severe = shown first
-   */
+  // Helper to calculate attention score for ranking
   const getAttentionScore = (metrics) => {
     if (!metrics) return 0;
 
     const totalErrors = (metrics.customErrors || 0) + (metrics.jsErrors || 0) + (metrics.requestErrors || 0);
     const avgDurationSeconds = (metrics.avgDuration || 0) / 1000;
 
-    // ┌─────────────────────────────────────────────────────────────────────────
-    // │ MODIFY THIS FORMULA TO CHANGE HOW ISSUES ARE PRIORITIZED
-    // │ Current: Errors weighted 10x, duration in seconds added
-    // └─────────────────────────────────────────────────────────────────────────
     return (totalErrors * 10) + avgDurationSeconds;
   };
 
-  /** Format synthetic availability with emoji */
+  // Helper to format synthetic availability with emoji
   const fmtSyntheticAvailability = (availability, target) => {
     if (availability == null) return "N/A";
 
@@ -282,53 +285,73 @@ export default async function ({ execution_id }) {
     }
   };
 
-  // ============================================================================
+  // ============================================
+  // SORT HELPER: Priority SLOs first, then alphabetical
+  // Only applies if prioritySloIds is configured above
+  // ============================================
+  const sortWithPriority = (slos) => {
+    if (prioritySloIds.length === 0) return slos.sort((a, b) => a.name.localeCompare(b.name));
+
+    return slos.sort((a, b) => {
+      const aIsPriority = prioritySloIds.includes(a.id);
+      const bIsPriority = prioritySloIds.includes(b.id);
+
+      if (aIsPriority && !bIsPriority) return -1;
+      if (!aIsPriority && bIsPriority) return 1;
+
+      if (aIsPriority && bIsPriority) {
+        return prioritySloIds.indexOf(a.id) - prioritySloIds.indexOf(b.id);
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+  };
+
+  // ============================================
   // CATEGORIZE SLOs
-  // ============================================================================
-  const failingSLOs = sloData.slos.filter(slo => {
-    const current = getCurrent(slo);
-    const status = safeGet(current, "status");
-    return isValidStatus(status) && status < slo.target;
-  });
+  // Pass/fail is based on the 7-day value
+  // This provides more stable alerting than daily fluctuations
+  // ============================================
+  const failingSLOs = sortWithPriority(
+    sloData.slos.filter(slo => {
+      const status = safeGet(slo.day7, "status");
+      return isValidStatus(status) && status < slo.target;
+    })
+  );
 
-  const passingSLOs = sloData.slos.filter(slo => {
-    const current = getCurrent(slo);
-    const status = safeGet(current, "status");
-    return isValidStatus(status) && status >= slo.target;
-  });
+  const passingSLOs = sortWithPriority(
+    sloData.slos.filter(slo => {
+      const status = safeGet(slo.day7, "status");
+      return isValidStatus(status) && status >= slo.target;
+    })
+  );
 
-  const noDataSLOs = sloData.slos.filter(slo => {
-    const current = getCurrent(slo);
-    const status = safeGet(current, "status");
-    return !isValidStatus(status);
-  });
+  const noDataSLOs = sortWithPriority(
+    sloData.slos.filter(slo => {
+      const status = safeGet(slo.day7, "status");
+      return !isValidStatus(status);
+    })
+  );
 
   console.log("Categorized: " + failingSLOs.length + " failing, " + passingSLOs.length + " passing, " + noDataSLOs.length + " no data");
 
   const breachStatus = failingSLOs.length > 0 ? "❌ BREACH" : "✅ OK";
 
-  // ============================================================================
-  // BUILD MARKDOWN REPORT
-  // ============================================================================
   let markdown = "";
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // HEADER SECTION
-  // ──────────────────────────────────────────────────────────────────────────
-  markdown += "# " + REPORT_TITLE + "\n\n";
-  markdown += "## " + REPORT_SUBTITLE + "\n\n";
+  // ============================================
+  // REPORT HEADER
+  // ============================================
+  markdown += "# " + reportTitle + "\n\n";
+  markdown += "## " + reportSubtitle + "\n\n";
   markdown += "**Report Date:** " + sloData.reportDate + "\n\n";
 
   markdown += "View SLO details and contributing factors on [dashboard](" + sloData.dashboardUrl + ")\n\n";
-  
-  // Optional: Add SLOs explained link (remove if not needed)
-  if (sloExplainedUrl && sloExplainedUrl.includes("YOUR-TENANT") === false) {
-    markdown += "[SLOs explained](" + sloExplainedUrl + ")\n";
-  }
+  markdown += "[SLOs explained](" + sloExplainedUrl + ")\n\n";
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   // EXECUTIVE SUMMARY
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   markdown += "---\n\n";
   markdown += "## Executive Summary\n\n";
   markdown += "| Metric | Value |\n";
@@ -340,14 +363,22 @@ export default async function ({ execution_id }) {
   markdown += "| No Data | " + noDataSLOs.length + (noDataSLOs.length > 0 ? " ➖" : "") + " |\n";
   markdown += "\n";
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   // SLO TABLE BUILDER
-  // ──────────────────────────────────────────────────────────────────────────
-  const buildSLOTable = (slos, title) => {
+  // Status emoji is based on the 7-day value
+  // Optional note appears between heading and table
+  // ============================================
+  const buildSLOTable = (slos, title, note) => {
     if (slos.length === 0) return "";
 
     let table = "---\n\n";
     table += "## " + title + "\n\n";
+
+    // Optional note between heading and table
+    if (note) {
+      table += "*" + note + "*\n\n";
+    }
+
     table += "| SLO Name | Target | 90 Day | 30 Day | 7 Day | Current | Trend |\n";
     table += "|----------|--------|--------|--------|-------|---------|-------|\n";
 
@@ -356,22 +387,28 @@ export default async function ({ execution_id }) {
       const currentStatus = safeGet(current, "status");
       const day7Status = safeGet(slo.day7, "status");
 
-      const emoji = getStatusEmoji(currentStatus, slo.target);
-      const trend = getTrend(day7Status, currentStatus);
+      // Emoji reflects 7-day status vs target
+      const emoji = getStatusEmoji(day7Status, slo.target);
+      const trend = getTrend(slo);
 
-      table += "| " + emoji + " " + slo.name + " | " + slo.target + "% | " + 
-               fmtStatus(safeGet(slo.day90, "status")) + " | " + 
-               fmtStatus(safeGet(slo.day30, "status")) + " | " + 
-               fmtStatus(day7Status) + " | " + 
-               fmtStatus(currentStatus) + " | " + trend + " |\n";
+      table += "| " + emoji + " " + slo.name +
+        " | " + slo.target + "%" +
+        " | " + fmtStatus(safeGet(slo.day90, "status")) +
+        " | " + fmtStatus(safeGet(slo.day30, "status")) +
+        " | " + fmtStatus(day7Status) +
+        " | " + fmtStatus(currentStatus) +
+        " | " + trend +
+        " |\n";
     }
 
     return table + "\n";
   };
 
-  // Add SLO tables in order of priority
+  // ============================================
+  // SLO TABLES
+  // ============================================
   if (failingSLOs.length > 0) {
-    markdown += buildSLOTable(failingSLOs, "❌ SLOs Below Target (Action Required)");
+    markdown += buildSLOTable(failingSLOs, "❌ SLOs Below Target (Action Required)", "Categorization is based on the 7-day value.");
   }
 
   if (passingSLOs.length > 0) {
@@ -382,14 +419,18 @@ export default async function ({ execution_id }) {
     markdown += buildSLOTable(noDataSLOs, "➖ SLOs With No Data");
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   // USER ACTION METRICS SECTION
-  // Shows only user actions that need attention
-  // ──────────────────────────────────────────────────────────────────────────
+  // Shows user actions that need attention:
+  //   - 10+ total errors across all error types
+  //   - 3+ second average duration
+  // Top 3 actions per SLO, ranked by severity score
+  // ============================================
   const userActionMetrics = sloData.userActionMetrics || {};
   const userActionEntities = sloData.userActionEntities || {};
 
   const slosWithActionableUserActions = sloData.slos.filter(slo => {
+    // Skip synthetic SLOs - they don't have user actions
     if (slo.isSynthetic) return false;
     if (!slo.userAction || slo.userAction.length === 0) return false;
 
@@ -402,7 +443,13 @@ export default async function ({ execution_id }) {
   if (slosWithActionableUserActions.length > 0) {
     markdown += "---\n\n";
     markdown += "## 📊 User Action Metrics (7-Day Totals)\n\n";
-    markdown += "The following user actions need attention (≥" + ERROR_THRESHOLD + " total errors OR ≥" + (DURATION_THRESHOLD_MS / 1000) + "s avg duration).\n\n";
+
+    // TODO: Add error analysis dashboard link if available
+    if (errorAnalysisUrl) {
+      markdown += "View detailed error analysis [dashboard](" + errorAnalysisUrl + ").\n\n";
+    }
+
+    markdown += "The following user actions need attention (≥10 total errors OR ≥3s avg duration).\n\n";
     markdown += "**Note:** Click on the user action names to view them in Dynatrace. Metrics below are based on completed user sessions and combine all action types (XHR, Load, or Route Change) with the same name, which may result in different averages than the Dynatrace UI where these are displayed separately.\n\n";
 
     for (const slo of slosWithActionableUserActions) {
@@ -415,11 +462,11 @@ export default async function ({ execution_id }) {
 
       if (actionsNeedingAttention.length === 0) continue;
 
-      // Sort by severity and take top N
+      // Rank by severity score and show top 3
       const sortedActions = actionsNeedingAttention
         .map(ua => ({ userAction: ua, metrics: userActionMetrics[ua], score: getAttentionScore(userActionMetrics[ua]) }))
         .sort((a, b) => b.score - a.score)
-        .slice(0, MAX_USER_ACTIONS_PER_SLO);
+        .slice(0, 3);
 
       markdown += "### " + slo.name + "\n\n";
 
@@ -446,10 +493,12 @@ export default async function ({ execution_id }) {
     }
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   // SYNTHETIC AVAILABILITY METRICS SECTION
-  // Shows synthetic monitors below threshold
-  // ──────────────────────────────────────────────────────────────────────────
+  // Only included if your workflow has synthetic SLOs
+  // If you don't use synthetic monitors, this section
+  // will be automatically skipped
+  // ============================================
   const syntheticMetrics = sloData.syntheticMetrics || {};
   const syntheticSlos = sloData.slos.filter(slo => slo.isSynthetic);
 
@@ -476,7 +525,6 @@ export default async function ({ execution_id }) {
 
         markdown += "### " + slo.name + "\n\n";
 
-        // Build clickable link for synthetic monitor
         const syntheticUrl = buildSyntheticUrl(config.syntheticId, config.type);
         const linkedMonitorName = syntheticUrl
           ? "[" + config.syntheticName + "](" + syntheticUrl + ")"
@@ -495,25 +543,23 @@ export default async function ({ execution_id }) {
     }
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   // LEGEND
-  // ──────────────────────────────────────────────────────────────────────────
+  // ============================================
   markdown += "---\n\n";
   markdown += "## Legend\n\n";
   markdown += "| Symbol | Meaning |\n";
   markdown += "|--------|----------|\n";
   markdown += "| ✅ | Meeting target / No errors |\n";
-  markdown += "| ⚠️ | Warning / Low errors (1-" + ERROR_WARNING + ") / Slow (>" + (DURATION_WARNING_MS / 1000) + "s) |\n";
-  markdown += "| ❌ | Below target / High errors (>" + ERROR_CRITICAL + ") / Very slow (>" + (DURATION_CRITICAL_MS / 1000) + "s) |\n";
+  markdown += "| ⚠️ | Warning / Low errors (1-10) / Slow (>3s) |\n";
+  markdown += "| ❌ | Below target / High errors (>10) / Very slow (>12s) |\n";
   markdown += "| ➖ | No data available |\n";
-  markdown += "| 📈 | Improving (current > 7 day) |\n";
-  markdown += "| 📉 | Degrading (current < 7 day) |\n";
-  markdown += "| ➡️ | Stable |\n";
+  markdown += "| 📈 | Consistently improving (all windows trending up) |\n";
+  markdown += "| 📉 | Consistently degrading (all windows trending down) |\n";
+  markdown += "| ➡️ | Stable (no meaningful change across windows) |\n";
+  markdown += "| 〰️ | Fluctuating (mixed up/down movement across windows) |\n";
   markdown += "\n";
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // FOOTER
-  // ──────────────────────────────────────────────────────────────────────────
   markdown += "---\n\n";
   markdown += "[View Dashboard in Dynatrace](" + sloData.dashboardUrl + ")\n";
 
